@@ -21,6 +21,8 @@ class RoomBooking:
         self._data = {}
 
     def book(self, room, day, start, end, name):
+        if not isinstance(name, str) or not name.strip():   # 빈 이름·공백·None 거절
+            return False
         if not _valid_place(room, day):
             return False
         if not (_is_int(start) and _is_int(end)):
