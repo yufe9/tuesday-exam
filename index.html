@@ -44,17 +44,14 @@
     강의실 A101·A102·B201, 요일 월~금, 9~21시, 한 번에 최대 3시간, 한 사람당 하루 2건까지 예약할 수 있습니다.</p>
   <div id="status" role="status">solution.py 불러오는 중… (처음엔 몇 초 걸립니다)</div>
 
-  <!-- 강의실·요일은 목록에서 고르거나 직접 입력 가능(C999, 일 같은 잘못된 값도 그대로 solution.py로 전달) -->
-  <datalist id="rooms"><option value="A101"><option value="A102"><option value="B201"></datalist>
-  <datalist id="days"><option value="월"><option value="화"><option value="수"><option value="목"><option value="금"></datalist>
-
+  <!-- 강의실·요일·시각 드롭다운은 JS 가 채움. 규칙 밖 값(C999, 일, 22시 등)도 골라서 그대로 solution.py로 전달 -->
   <section>
     <h2>예약</h2>
     <form id="f-book" class="grid">
-      <label>강의실<input name="room" list="rooms" value="A101" required></label>
-      <label>요일<input name="day" list="days" value="월" required></label>
-      <label>시작(시)<input name="start" inputmode="decimal" value="10" required></label>
-      <label>끝(시)<input name="end" inputmode="decimal" value="12" required></label>
+      <label>강의실<select name="room" data-kind="room"></select></label>
+      <label>요일<select name="day" data-kind="day"></select></label>
+      <label>시작(시)<select name="start" data-kind="hour" data-default="10"></select></label>
+      <label>끝(시)<select name="end" data-kind="hour" data-default="12"></select></label>
       <label class="wide">이름<input name="name" placeholder="예: 김민수" required></label>
       <button disabled>예약하기</button>
     </form>
@@ -64,9 +61,9 @@
   <section>
     <h2>취소</h2>
     <form id="f-cancel" class="grid">
-      <label>강의실<input name="room" list="rooms" value="A101" required></label>
-      <label>요일<input name="day" list="days" value="월" required></label>
-      <label>시작 시각(시)<input name="start" inputmode="decimal" value="10" required></label>
+      <label>강의실<select name="room" data-kind="room"></select></label>
+      <label>요일<select name="day" data-kind="day"></select></label>
+      <label>시작 시각(시)<select name="start" data-kind="hour" data-default="10"></select></label>
       <label>이름<input name="name" placeholder="예약한 사람" required></label>
       <button disabled>취소하기</button>
     </form>
@@ -118,6 +115,42 @@
     small.textContent = detail;
     el.appendChild(small);
   }
+
+  // 드롭다운 목록. "선택 가능"은 문제지의 안내 그대로이고, 아래 묶음은 실패를 확인해 보기 위한 값
+  // (목록일 뿐 판정은 하지 않음 — 어떤 값이든 solution.py 가 성공/실패를 정함)
+  var CHOICES = {
+    room: { ok: ["A101", "A102", "B201"], odd: ["C999", "a101"], def: "A101" },
+    day: { ok: ["월", "화", "수", "목", "금"], odd: ["토", "일", "월요일"], def: "월" },
+    hour: { ok: Array.from({ length: 13 }, function (_, i) { return String(9 + i); }),
+            odd: ["7", "8", "22", "23", "10.5", "10.0", "-1"], def: "10" }
+  };
+  var CUSTOM = "__custom__";
+
+  function addGroup(sel, label, values) {
+    var g = document.createElement("optgroup"); g.label = label;
+    values.forEach(function (v) { var o = document.createElement("option"); o.value = o.textContent = v; g.appendChild(o); });
+    sel.appendChild(g);
+    return g;
+  }
+
+  function fillSelect(sel) {
+    var c = CHOICES[sel.dataset.kind];
+    addGroup(sel, "선택 가능", c.ok);
+    addGroup(sel, "규칙 밖 값 (실패 확인용)", c.odd);
+    var o = document.createElement("option"); o.value = CUSTOM; o.textContent = "직접 입력…";
+    sel.appendChild(o);
+    sel.value = sel.dataset.default || c.def;
+    sel.dataset.last = sel.value;
+    sel.addEventListener("change", function () {
+      if (sel.value !== CUSTOM) { sel.dataset.last = sel.value; return; }
+      var v = window.prompt("값을 직접 입력하세요");
+      if (v === null || v.trim() === "") { sel.value = sel.dataset.last; return; }
+      v = v.trim();
+      if (!hasOption(sel, v)) addGroup(sel, "직접 입력한 값", [v]);
+      sel.value = sel.dataset.last = v;
+    });
+  }
+  document.querySelectorAll("select[data-kind]").forEach(fillSelect);
 
   function hasOption(select, v) {
     return Array.prototype.some.call(select.options, function (o) { return o.value === v; });
