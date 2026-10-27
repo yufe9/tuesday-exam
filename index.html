@@ -87,16 +87,29 @@
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
 <script>
 (function () {
-  var rb = null;
+  var rb = null, pyBook = null, pyCancel = null;
   var fSched = document.getElementById("f-sched");
 
-  // 입력 문자열을 숫자로만 바꿔 전달. "10"→정수, "10.5"→소수, 나머지는 문자 그대로(판단은 solution.py 몫)
-  function num(s) {
-    s = s.trim();
-    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
-    if (s !== "" && !isNaN(Number(s))) return Number(s);
-    return s;
-  }
+  // 시각 입력을 파이썬 안에서 숫자로 바꾼 뒤 그대로 RoomBooking 에 넘김(규칙 판단은 전부 solution.py 몫).
+  // JS 는 10.0 과 10 을 구분하지 못해 JS 에서 바꾸면 "10.0" 이 정수로 넘어가므로 변환을 파이썬에서 함
+  var GLUE = [
+    "import importlib, sys",
+    "sys.path.insert(0, '.'); importlib.invalidate_caches()",
+    "from solution import RoomBooking",
+    "rb = RoomBooking()",
+    "def num(s):",
+    "    s = s.strip()",
+    "    for f in (int, float):",
+    "        try:",
+    "            return f(s)",
+    "        except ValueError:",
+    "            pass",
+    "    return s",
+    "def web_book(room, day, s, e, name):",
+    "    return rb.book(room, day, num(s), num(e), name)",
+    "def web_cancel(room, day, s, name):",
+    "    return rb.cancel(room, day, num(s), name)"
+  ].join("\n");
 
   function show(el, ok, detail) {
     el.className = "result " + (ok ? "ok" : "ng");
@@ -140,8 +153,8 @@
   document.getElementById("f-book").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target, room = f.room.value.trim(), day = f.day.value.trim(), name = f.name.value.trim();
-    var s = num(f.start.value), en = num(f.end.value);
-    var ok = rb.book(room, day, s, en, name);
+    var s = f.start.value.trim(), en = f.end.value.trim();
+    var ok = pyBook(room, day, s, en, name);
     show(document.getElementById("r-book"), ok, name + " · " + room + " · " + day + " · " + s + "~" + en + "시");
     refresh(room, day);
   });
@@ -149,8 +162,8 @@
   document.getElementById("f-cancel").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target, room = f.room.value.trim(), day = f.day.value.trim(), name = f.name.value.trim();
-    var s = num(f.start.value);
-    var ok = rb.cancel(room, day, s, name);
+    var s = f.start.value.trim();
+    var ok = pyCancel(room, day, s, name);
     show(document.getElementById("r-cancel"), ok, name + " · " + room + " · " + day + " · " + s + "시 시작 예약 취소");
     refresh(room, day);
   });
@@ -168,9 +181,11 @@
       var res = await fetch("solution.py?v=" + Date.now(), { cache: "no-store" });
       if (!res.ok) throw new Error("solution.py 를 받지 못했습니다 (HTTP " + res.status + ")");
       py.FS.writeFile("solution.py", await res.text(), { encoding: "utf8" });
-      py.runPython("import importlib, sys; sys.path.insert(0, '.'); importlib.invalidate_caches()");
-      rb = py.pyimport("solution").RoomBooking();
-      window.rb = rb; // 콘솔 확인용
+      py.runPython(GLUE);
+      rb = py.globals.get("rb");
+      pyBook = py.globals.get("web_book");
+      pyCancel = py.globals.get("web_cancel");
+      window.rb = rb; window.py = py; // 콘솔 확인용
       document.querySelectorAll("button").forEach(function (b) { b.disabled = false; });
       status.textContent = "준비 완료 · solution.py 의 RoomBooking 으로 동작 중 (새로고침하면 예약이 비워집니다)";
       renderSchedule("A101", "월");
